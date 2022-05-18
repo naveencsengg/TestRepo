@@ -1,0 +1,213 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+     
+       "environment": {
+        "type": "string"    
+        }
+
+        "workflows_name": {
+           "type": "String"
+        }
+
+    },
+    "variables": {
+    "logicAppName": "[concat(parameters('workflow_name'),'.', parameters('environment'),'.eip')]",  
+    "blobApicName": "[concat('common-blob-', parameters('environment'),'-apic')]",
+    "blobApicId": "[concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/','/EIP/','/providers/Microsoft.Web/connections/',variables('blobApicName'))]",
+    "azureblobManagedApisId": "[concat('/subscriptions/',subscription().subscriptionId,'/providers/Microsoft.Web/locations/australiaeast/managedApis/azureblob')]
+},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[variables('logicAppName')]",
+            "location": "australiaeast",
+            "tags": {
+                "displayName": "LogicApp"
+            },
+            "properties": {
+                "state": "Disabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },
+                        "SendToFileShareQueue": {
+                            "defaultValue": "test",
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "routingHeader": {
+                                            "properties": {
+                                                "applicationName": {
+                                                    "type": "string"
+                                                },
+                                                "interfaceName": {
+                                                    "type": "string"
+                                                },
+                                                "logLevel": {
+                                                    "type": "string"
+                                                },
+                                                "source": {
+                                                    "type": "string"
+                                                },
+                                                "sourceMessageType": {
+                                                    "type": "string"
+                                                },
+                                                "target": {
+                                                    "type": "string"
+                                                },
+                                                "targetMessageType": {
+                                                    "type": "string"
+                                                },
+                                                "version": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "routingSteps": {
+                                            "items": {
+                                                "properties": {
+                                                    "stepConfig": {
+                                                        "properties": {
+                                                            "azureblobconn": {
+                                                                "type": "string"
+                                                            },
+                                                            "queue": {
+                                                                "type": "string"
+                                                            },
+                                                            "servicebusconn": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    },
+                                                    "stepName": {
+                                                        "type": "string"
+                                                    },
+                                                    "stepNumber": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "stepName",
+                                                    "stepNumber",
+                                                    "stepConfig"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Catch": {
+                            "actions": {
+                                "Filter_array": {
+                                    "runAfter": {},
+                                    "type": "Query",
+                                    "inputs": {
+                                        "from": "@result('Try')",
+                                        "where": "@equals(item()['status'], 'Failed')"
+                                    }
+                                },
+                                "Terminate": {
+                                    "runAfter": {
+                                        "Filter_array": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Terminate",
+                                    "inputs": {
+                                        "runError": {
+                                            "code": "Error_999",
+                                            "message": "RunTime Exception Occurred in Workflow - @{workflow().name} for flow correlation id : @{workflow().run.name}. @{if(empty(body('Filter_array')),'',concat(body('Filter_array')[0]['name'],' action execution failed'))}"
+                                        },
+                                        "runStatus": "Failed"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Try": [
+                                    "TimedOut",
+                                    "Skipped",
+                                    "Failed"
+                                ]
+                            },
+                            "type": "Scope"
+                        },
+                        "Try": {
+                            "actions": {
+                                "Get_blob_content": {
+                                    "runAfter": {},
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureBlobConnection']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('AccountNameFromSettings'))}/GetFileContentByPath",
+                                        "queries": {
+                                            "inferContentType": true,
+                                            "path": "@{concat('/routingslipssac/',triggerBody()?['routingHeader']?['applicationName'],'/',triggerBody()?['routingHeader']?['applicationName'],'.',triggerBody()?['routingHeader']?['interfaceName'],'.json')}",
+                                            "queryParametersSingleEncoded": true
+                                        }
+                                    }
+                                },
+                                "Response": {
+                                    "runAfter": {
+                                        "Get_blob_content": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Response",
+                                    "kind": "Http",
+                                    "inputs": {
+                                        "body": "@json(concat('[',base64ToString(replace(body('Get_blob_content')?['$content'],'77u/','')),']'))",
+                                        "statusCode": 200
+                                    }
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "Scope"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                          "azureBlobConnection": {
+                          "connectionId": "[variables('blobApicId')]",
+                          "connectionName": "[variables('blobApicName')]",
+                          "id": "[variables('azureblobManagedApisId')]"
+              }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
