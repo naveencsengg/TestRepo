@@ -7,7 +7,7 @@
         "type": "string"    
         },
 
-        "workflows_name": {
+        "workflow_name": {
            "type": "String"
         }
 
