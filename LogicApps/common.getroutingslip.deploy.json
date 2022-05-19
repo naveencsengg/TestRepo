@@ -5,7 +5,7 @@
      
        "environment": {
         "type": "string"    
-        }
+        },
 
         "workflows_name": {
            "type": "String"
@@ -16,7 +16,7 @@
     "logicAppName": "[concat(parameters('workflow_name'),'.', parameters('environment'),'.eip')]",  
     "blobApicName": "[concat('common-blob-', parameters('environment'),'-apic')]",
     "blobApicId": "[concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/','/EIP/','/providers/Microsoft.Web/connections/',variables('blobApicName'))]",
-    "azureblobManagedApisId": "[concat('/subscriptions/',subscription().subscriptionId,'/providers/Microsoft.Web/locations/australiaeast/managedApis/azureblob')]
+    "azureblobManagedApisId": "[concat('/subscriptions/',subscription().subscriptionId,'/providers/Microsoft.Web/locations/australiaeast/managedApis/azureblob')]"
 },
     "resources": [
         {
